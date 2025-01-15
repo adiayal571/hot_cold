@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dynamic Volume Control</title>
+  <style>
+    /* Styles for the page */
+    body {
+      font-family: 'Roboto', sans-serif;
+      text-align: center;
+      background: linear-gradient(135deg, #f0f4f8, #d1e8e2);
+      margin: 50px;
+      color: #333;
+      animation: backgroundAnimation 10s ease-in-out infinite;
+    }
+
+    @keyframes backgroundAnimation {
+      0% { background: linear-gradient(135deg, #f0f4f8, #d1e8e2); }
+      50% { background: linear-gradient(135deg, #e3f2fd, #c5e1f7); }
+      100% { background: linear-gradient(135deg, #f0f4f8, #d1e8e2); }
+    }
+
+    h1 {
+      font-size: 36px;
+      color: #2a2a2a;
+      font-weight: 700;
+      margin-bottom: 30px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      transition: color 0.5s ease;
+    }
+
+    .indicator {
+      width: 120px;
+      height: 120px;
+      margin: 20px auto;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+      transition: background-color 0.5s, transform 0.3s ease-in-out, box-shadow 0.3s ease;
+      animation: pulse 1.5s infinite alternate;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2); }
+      100% { transform: scale(1.1); box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3); }
+    }
+
+    .indicator:hover { transform: scale(1.15); box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4); }
+
+    .cold { background: linear-gradient(135deg, #007BFF, #3a8ccf); }
+    .warm { background: linear-gradient(135deg, #FFC107, #ffbb33); }
+    .hot { background: linear-gradient(135deg, #DC3545, #e63946); }
+
+    #status { font-size: 24px; font-weight: 600; margin-top: 30px; color: #555; }
+
+    .status-text { font-size: 18px; color: #666; margin-top: 10px; opacity: 0; animation: fadeIn 2s ease forwards 0.5s; }
+    @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+  </style>
+</head>
+<body>
+  <h1>Dynamic Volume Control</h1>
+  <div id="cold-indicator" class="indicator"></div>
+  <div id="warm-indicator" class="indicator"></div>
+  <div id="hot-indicator" class="indicator"></div>
+  <p id="status">Current RSSI: <span id="rssi">0</span> dBm</p>
+
+  <script>
+    let audioContext = null;
+    let gainNode = null;
+
+    // Start the audio context on user interaction to comply with browser restrictions
+    function initializeAudio() {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        gainNode = audioContext.createGain();
+        gainNode.connect(audioContext.destination);  // Connect the gain node to the audio context output
+        console.log("Audio context initialized");
+      }
+    }
+
+    // Adjust volume based on RSSI value
+    function adjustVolume(rssi) {
+      // Map RSSI value to a volume range (20-100)
+      let volume = ((rssi + 100) / 70) * 80 + 20;  // Mapping the RSSI to volume between 20 and 100
+      volume = Math.max(20, Math.min(100, volume)); // Ensuring volume stays between 20 and 100
+      gainNode.gain.setValueAtTime(volume / 100, audioContext.currentTime); // Set gain for audio output
+      console.log("Volume adjusted to:", volume);
+    }
+
+    // Fetch RSSI data from server
+    async function fetchData() {
+      try {
+        const response = await fetch('http://127.0.0.1:8000/getLast');
+        if (response.ok) {
+          const data = await response.json();
+          const rssi = data.last;
+
+          if (rssi !== undefined) {
+            document.getElementById('rssi').innerText = rssi;
+            updateIndicators(rssi);
+            adjustVolume(rssi); // Adjust the volume based on RSSI
+          } else {
+            console.error("No RSSI data returned.");
+          }
+        } else {
+          console.error("Failed to fetch data.");
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    }
+
+    // Update indicator colors based on RSSI
+    function updateIndicators(rssi) {
+      let number = rssi;
+
+      // Reset all indicators
+      document.getElementById("cold-indicator").classList.remove("cold");
+      document.getElementById("warm-indicator").classList.remove("warm");
+      document.getElementById("hot-indicator").classList.remove("hot");
+
+      if (number > -30) {
+        document.getElementById("cold-indicator").classList.add("cold");
+      } else if (number > -60 && number <= -30) {
+        document.getElementById("warm-indicator").classList.add("warm");
+      } else if (number <= -60) {
+        document.getElementById("hot-indicator").classList.add("hot");
+      }
+    }
+
+    // Fetch data every second
+    setInterval(() => {
+      initializeAudio(); // Initialize audio context only once
+      fetchData(); // Fetch and update data
+    }, 1000);
+
+    // Initial fetch and audio setup
+    initializeAudio();
+    fetchData();
+  </script>
+</body>
+</html>
